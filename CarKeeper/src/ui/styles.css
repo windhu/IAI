@@ -537,7 +537,7 @@ textarea.input {
   line-height: 0;
 }
 
-.crop img {
+.crop canvas {
   width: 100%;
   height: auto;
   display: block;

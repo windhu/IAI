@@ -17,6 +17,26 @@ async function renderDashboard(browser: Browser, top = 'ODO 58320 km', bottom = 
   return png;
 }
 
+async function jpegPhoto(page: Page, width: number, height: number, left: string, right: string): Promise<Buffer> {
+  const data = await page.evaluate(({ width, height, left, right }) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = left;
+    ctx.fillRect(0, 0, width / 2, height);
+    ctx.fillStyle = right;
+    ctx.fillRect(width / 2, 0, width / 2, height);
+    return canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
+  }, { width, height, left, right });
+  return Buffer.from(data, 'base64');
+}
+
+function withExifOrientation6(jpeg: Buffer): Buffer {
+  const exif = Buffer.from('ffe1002245786966000049492a0008000000010012010300010000000600000000000000', 'hex');
+  return Buffer.concat([jpeg.subarray(0, 2), exif, jpeg.subarray(2)]);
+}
+
 async function trackResources(page: Page) {
   await page.addInitScript(() => {
     const stats = { workersCreated: 0, workersTerminated: 0, liveUrls: new Set<string>() };
@@ -67,6 +87,7 @@ async function openCapture(page: Page, base: string, image: Buffer) {
 
 /** Drags a crop box over the given fraction of the photo. */
 async function dragCrop(page: Page, from: [number, number], to: [number, number]) {
+  await page.getByTestId('crop-area').scrollIntoViewIfNeeded();
   const box = (await page.getByTestId('crop-area').boundingBox())!;
   await page.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
   await page.mouse.down();
@@ -85,6 +106,162 @@ async function prepareOcrFromHome(page: Page, base: string) {
   await status.getByRole('button', { name: '下载' }).click();
   await expect(status).toHaveAttribute('data-state', 'ready', { timeout: 60_000 });
 }
+
+test('手机 JPEG 预览使用解码像素，不依赖原图 object URL，并限制尺寸', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (obj) => obj instanceof File ? `blob:${location.origin}/unavailable` : original(obj);
+  });
+  await page.goto(`${ROOT}#/fuel/new`);
+  const image = await jpegPhoto(page, 2200, 1100, '#ff0000', '#0000ff');
+  await page.getByRole('button', { name: '拍照识别' }).click();
+  await page.getByTestId('album-input').setInputFiles({ name: 'dashboard.jpg', mimeType: 'image/jpeg', buffer: image });
+  await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+  const canvas = page.getByTestId('crop-preview');
+  await expect(canvas).toBeVisible();
+  const result = await canvas.evaluate((element: HTMLCanvasElement) => {
+    const ctx = element.getContext('2d')!;
+    return {
+      width: element.width,
+      height: element.height,
+      left: Array.from(ctx.getImageData(element.width / 4, element.height / 2, 1, 1).data),
+      right: Array.from(ctx.getImageData(element.width * 3 / 4, element.height / 2, 1, 1).data),
+    };
+  });
+  expect(result).toMatchObject({ width: 1600, height: 800 });
+  expect(result.left[0]).toBeGreaterThan(200);
+  expect(result.right[2]).toBeGreaterThan(200);
+  await dragCrop(page, [0.1, 0.1], [0.8, 0.7]);
+  const crop = await page.getByTestId('crop-box').evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const area = element.parentElement!.getBoundingClientRect();
+    return { left: (box.left - area.left) / area.width, width: box.width / area.width };
+  });
+  expect(crop.left).toBeCloseTo(0.1, 1);
+  expect(crop.width).toBeCloseTo(0.7, 1);
+});
+
+test('带 EXIF 方向的预览与识别裁剪像素对应', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.toBlob;
+    Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+      configurable: true,
+      value: function (this: HTMLCanvasElement, ...args: Parameters<HTMLCanvasElement['toBlob']>) {
+        const ctx = this.getContext('2d');
+        if (ctx) {
+          (window as Window & { __cropPixel?: number[] }).__cropPixel =
+            Array.from(ctx.getImageData(Math.floor(this.width / 2), Math.floor(this.height / 2), 1, 1).data);
+        }
+        return Reflect.apply(original, this, args);
+      },
+    });
+  });
+  await page.goto(`${ROOT}#/fuel/new`);
+  const image = withExifOrientation6(await jpegPhoto(page, 400, 200, '#000000', '#ffffff'));
+  await page.getByRole('button', { name: '拍照识别' }).click();
+  await page.getByTestId('album-input').setInputFiles({ name: 'rotated.jpg', mimeType: 'image/jpeg', buffer: image });
+  await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+  const pixels = await page.getByTestId('crop-preview').evaluate((element: HTMLCanvasElement) => {
+    const ctx = element.getContext('2d')!;
+    return {
+      width: element.width,
+      height: element.height,
+      top: ctx.getImageData(element.width / 2, element.height / 4, 1, 1).data[0],
+      bottom: ctx.getImageData(element.width / 2, element.height * 3 / 4, 1, 1).data[0],
+    };
+  });
+  expect(pixels).toMatchObject({ width: 200, height: 400 });
+  expect(pixels.top).toBeLessThan(30);
+  expect(pixels.bottom).toBeGreaterThan(225);
+  await dragCrop(page, [0.1, 0.05], [0.9, 0.45]);
+  await page.getByRole('button', { name: '识别所选区域' }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __cropPixel?: number[] }).__cropPixel?.[0]), {
+    timeout: 60_000,
+  }).toBeLessThan(30);
+});
+
+test('预览绘制失败时可换图或手动输入，已填内容保留', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value: function (this: HTMLCanvasElement, ...args: Parameters<HTMLCanvasElement['getContext']>) {
+        if (this.dataset.testid === 'crop-preview' && (window as Window & { __failPreview?: boolean }).__failPreview) return null;
+        return Reflect.apply(original, this, args);
+      },
+    });
+    (window as Window & { __failPreview?: boolean }).__failPreview = true;
+  });
+  await page.goto(`${ROOT}#/fuel/new`);
+  const image = await jpegPhoto(page, 400, 200, '#ff0000', '#0000ff');
+  await page.getByLabel('总里程（公里）').fill('12345');
+  await page.getByLabel('金额（元）').fill('300');
+  await page.getByRole('button', { name: '拍照识别' }).click();
+  await page.getByTestId('album-input').setInputFiles({ name: 'dashboard.jpg', mimeType: 'image/jpeg', buffer: image });
+  await expect(page.getByRole('alert')).toContainText('无法显示照片预览');
+  await expect(page.getByRole('button', { name: '识别所选区域' })).toHaveCount(0);
+  await page.evaluate(() => { (window as Window & { __failPreview?: boolean }).__failPreview = false; });
+  await page.getByTestId('album-input').setInputFiles({ name: 'dashboard.jpg', mimeType: 'image/jpeg', buffer: image });
+  await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+  await expect(page.getByText('无法显示照片预览')).toHaveCount(0);
+  await page.evaluate(() => { (window as Window & { __failPreview?: boolean }).__failPreview = true; });
+  await page.getByTestId('album-input').setInputFiles({ name: 'dashboard.jpg', mimeType: 'image/jpeg', buffer: image });
+  await expect(page.getByRole('alert')).toContainText('无法显示照片预览');
+  await page.getByRole('button', { name: '改为手动输入' }).click();
+  await expect(page.getByLabel('总里程（公里）')).toHaveValue('12345');
+  await expect(page.getByLabel('金额（元）')).toHaveValue('300');
+});
+
+test('更换照片或关闭时，迟到的解码结果不会覆盖界面并释放图片', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = window.createImageBitmap.bind(window);
+    const close = ImageBitmap.prototype.close;
+    const state = { pending: 0, closed: 0, failed: 0 };
+    (window as Window & { __previewTest?: typeof state }).__previewTest = state;
+    ImageBitmap.prototype.close = function () {
+      state.closed++;
+      close.call(this);
+    };
+    Object.defineProperty(window, 'createImageBitmap', {
+      configurable: true,
+      value: (source: ImageBitmapSource, options?: ImageBitmapOptions) => {
+        if (source instanceof File && source.name === 'reject.jpg') {
+          return new Promise<ImageBitmap>((_resolve, reject) => setTimeout(() => {
+            state.failed++;
+            reject(new Error('Delayed decode failure'));
+          }, 1500));
+        }
+        const result = original(source, options);
+        if (!(source instanceof File) || source.name !== 'slow.jpg') return result;
+        state.pending++;
+        return result.then((image) => new Promise<ImageBitmap>((resolve) => setTimeout(() => resolve(image), 1500)));
+      },
+    });
+  });
+  await page.goto(`${ROOT}#/fuel/new`);
+  const slow = await jpegPhoto(page, 400, 200, '#0000ff', '#0000ff');
+  const fast = await jpegPhoto(page, 400, 200, '#ff0000', '#ff0000');
+  await page.getByRole('button', { name: '拍照识别' }).click();
+  await page.getByTestId('album-input').setInputFiles({ name: 'slow.jpg', mimeType: 'image/jpeg', buffer: slow });
+  await expect.poll(() => page.evaluate(() => (window as Window & { __previewTest?: { pending: number } }).__previewTest?.pending)).toBe(1);
+  await page.getByTestId('album-input').setInputFiles({ name: 'fast.jpg', mimeType: 'image/jpeg', buffer: fast });
+  await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __previewTest?: { closed: number } }).__previewTest?.closed)).toBe(1);
+  const pixel = await page.getByTestId('crop-preview').evaluate((element: HTMLCanvasElement) =>
+    Array.from(element.getContext('2d')!.getImageData(10, 10, 1, 1).data));
+  expect(pixel[0]).toBeGreaterThan(200);
+  expect(pixel[2]).toBeLessThan(30);
+  await page.getByTestId('album-input').setInputFiles({ name: 'reject.jpg', mimeType: 'image/jpeg', buffer: slow });
+  await page.getByTestId('album-input').setInputFiles({ name: 'fast.jpg', mimeType: 'image/jpeg', buffer: fast });
+  await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __previewTest?: { failed: number } }).__previewTest?.failed)).toBe(1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByTestId('album-input').setInputFiles({ name: 'slow.jpg', mimeType: 'image/jpeg', buffer: slow });
+  await expect.poll(() => page.evaluate(() => (window as Window & { __previewTest?: { pending: number } }).__previewTest?.pending)).toBe(2);
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __previewTest?: { closed: number } }).__previewTest?.closed)).toBe(4);
+  await expect(page.getByTestId('crop-preview')).toHaveCount(0);
+});
 
 for (const [label, base] of [
   ['根路径', ROOT],

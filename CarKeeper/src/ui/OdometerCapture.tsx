@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseOdometer } from '../domain/records';
 import { checkOcrResources, OcrError, prepareOcr, startRecognition, type RecognitionJob } from '../ocr/engine';
 import { cropForOcr, decodeImage, DEFAULT_CROP, type CropRect } from '../ocr/image';
@@ -9,6 +9,7 @@ import { CropSelector } from './CropSelector';
 type Phase =
   | { name: 'pick' }
   | { name: 'loading' }
+  | { name: 'previewing' }
   | { name: 'crop' }
   | { name: 'preparing'; loaded: number; total: number }
   | { name: 'recognizing'; progress: number }
@@ -20,7 +21,7 @@ export const formatMb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} 
 export function OdometerCapture({ onAccept, onClose }: { onAccept: (km: number) => void; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>({ name: 'pick' });
   const [crop, setCrop] = useState<CropRect>(DEFAULT_CROP);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ImageBitmap | null>(null);
   const [edited, setEdited] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
   const bitmap = useRef<ImageBitmap | null>(null);
@@ -40,11 +41,22 @@ export function OdometerCapture({ onAccept, onClose }: { onAccept: (km: number) 
   const releaseImage = () => {
     bitmap.current?.close();
     bitmap.current = null;
-    setPreview((url) => {
-      if (url) URL.revokeObjectURL(url);
-      return null;
-    });
+    setPreview(null);
   };
+
+  const onPreviewReady = useCallback((image: ImageBitmap) => {
+    if (bitmap.current === image) {
+      setPhase((current) => current.name === 'previewing' ? { name: 'crop' } : current);
+    }
+  }, []);
+
+  const onPreviewError = useCallback((image: ImageBitmap) => {
+    if (bitmap.current !== image) return;
+    image.close();
+    bitmap.current = null;
+    setPreview(null);
+    setPhase({ name: 'error', message: '无法显示照片预览，请重新选择照片或手动输入总里程。', canRetry: false });
+  }, []);
 
   useEffect(
     () => () => {
@@ -54,10 +66,6 @@ export function OdometerCapture({ onAccept, onClose }: { onAccept: (km: number) 
     },
     [],
   );
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
-
   const close = () => {
     stopWork();
     releaseImage();
@@ -77,11 +85,17 @@ export function OdometerCapture({ onAccept, onClose }: { onAccept: (km: number) 
         return;
       }
       bitmap.current = decoded;
-      setPreview(URL.createObjectURL(file));
+      setPreview(decoded);
       setCrop(DEFAULT_CROP);
-      setPhase({ name: 'crop' });
+      setPhase({ name: 'previewing' });
     } catch (error) {
-      if (current === token.current) setPhase({ name: 'error', message: (error as Error).message, canRetry: false });
+      if (current === token.current) {
+        setPhase({
+          name: 'error',
+          message: error instanceof Error ? error.message : '无法读取这张图片，请换一张照片或手动输入总里程。',
+          canRetry: false,
+        });
+      }
     }
   }
 
@@ -184,12 +198,12 @@ export function OdometerCapture({ onAccept, onClose }: { onAccept: (km: number) 
         <p className="muted small">如果无法打开相机（未授权或浏览器不支持），请从相册选择照片，或直接手动输入。</p>
       )}
 
-      {phase.name === 'loading' && <p role="status">正在读取照片…</p>}
+      {(phase.name === 'loading' || phase.name === 'previewing') && <p role="status">正在读取照片…</p>}
 
       {preview && phase.name !== 'loading' && (
         <>
           <p className="small">在照片上拖动，框选只包含总里程（ODO）数字的区域：</p>
-          <CropSelector src={preview} rect={crop} onChange={setCrop} />
+          <CropSelector image={preview} rect={crop} onChange={setCrop} onReady={onPreviewReady} onError={onPreviewError} />
         </>
       )}
 

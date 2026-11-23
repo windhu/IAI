@@ -1,12 +1,45 @@
-import { useRef, type PointerEvent } from 'react';
+import { useLayoutEffect, useRef, type PointerEvent } from 'react';
 import { clampCrop, type CropRect } from '../ocr/image';
 
 const MIN_SIZE = 0.03;
 
 /** Drag on the photo to draw the odometer area; tiny drags keep the previous selection. */
-export function CropSelector({ src, rect, onChange }: { src: string; rect: CropRect; onChange: (r: CropRect) => void }) {
+export function CropSelector({
+  image,
+  rect,
+  onChange,
+  onReady,
+  onError,
+}: {
+  image: ImageBitmap;
+  rect: CropRect;
+  onChange: (r: CropRect) => void;
+  onReady: (image: ImageBitmap) => void;
+  onError: (image: ImageBitmap) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<{ x: number; y: number; previous: CropRect } | null>(null);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current!;
+    try {
+      if (!image.width || !image.height) throw new Error('Empty image');
+      const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Canvas unavailable');
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      onReady(image);
+    } catch {
+      onError(image);
+    }
+    return () => {
+      canvas.width = 0;
+      canvas.height = 0;
+    };
+  }, [image, onReady, onError]);
 
   const point = (e: PointerEvent) => {
     const box = ref.current!.getBoundingClientRect();
@@ -42,7 +75,7 @@ export function CropSelector({ src, rect, onChange }: { src: string; rect: CropR
         drag.current = null;
       }}
     >
-      <img src={src} alt="仪表盘照片" draggable={false} />
+      <canvas ref={canvasRef} role="img" aria-label="仪表盘照片" data-testid="crop-preview" />
       <div
         className="crop-box"
         data-testid="crop-box"
