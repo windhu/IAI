@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: CarKeeper/package-lock.json
+
+      - name: Install CarKeeper dependencies
+        working-directory: CarKeeper
+        run: npm ci
+
+      - name: Build CarKeeper
+        working-directory: CarKeeper
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/CarKeeper/
+        run: npm run build
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/CarKeeper _site/WaterMarkApp
+          cp index.html _site/index.html
+          cp -R CarKeeper/dist/. _site/CarKeeper/
+          cp WaterMarkApp/web/index.html _site/WaterMarkApp/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
