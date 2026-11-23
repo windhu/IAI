@@ -55,12 +55,13 @@ Then open <http://localhost:8000>. To try it on your phone, use your computer's 
 
 ## Deploy (GitHub Pages)
 
-1. Push this repository to GitHub.
-2. In **Settings → Pages**, set **Source** to **GitHub Actions**.
-3. Push to `main` (or run the **Deploy to GitHub Pages** workflow manually).
+Within the IAI repository, the root [deployment workflow](../.github/workflows/deploy-pages.yml)
+publishes this app together with CarKeeper at
+<https://windhu.github.io/IAI/WaterMarkApp/>. Set **Settings → Pages → Source** to
+**GitHub Actions**, then push to `main` or run the workflow manually.
 
-The workflow uploads the `web/` folder (just `index.html`) unchanged. The app is then available at
-`https://<user>.github.io/<repo>/`. Any other static host (Netlify, Cloudflare Pages,
+The nested `.github/workflows/deploy-pages.yml` is only active if WaterMarkApp itself is
+the repository root; GitHub does not run nested workflows in IAI. Any other static host (Netlify, Cloudflare Pages,
 an S3 bucket, nginx…) works too – just publish `web/index.html`.
 
 ## Use on Android
