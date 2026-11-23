@@ -35,3 +35,70 @@ test('首页提供四个入口且各页面在手机宽度下无横向溢出', as
   await page.goBack();
   await expect(page.getByRole('heading', { name: '历史记录' })).toBeVisible();
 });
+
+for (const width of [360, 390, 768, 1024, 1440]) {
+  test(`${width}px 视口利用空间且主要控件保持可操作`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: '爱车记录' })).toBeVisible();
+    const main = page.locator('.main');
+    const metrics = await main.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        width: element.getBoundingClientRect().width,
+        paddingLeft: parseFloat(style.paddingLeft),
+        paddingRight: parseFloat(style.paddingRight),
+        fontSize: parseFloat(getComputedStyle(document.body).fontSize),
+      };
+    });
+    expect(metrics.fontSize).toBeGreaterThanOrEqual(17);
+    if (width <= 390) {
+      expect(metrics.paddingLeft).toBeLessThanOrEqual(12);
+      expect(metrics.paddingRight).toBeLessThanOrEqual(12);
+    }
+    if (width === 1440) expect(metrics.width - metrics.paddingLeft - metrics.paddingRight).toBeGreaterThanOrEqual(900);
+    await page.goto('/#/fuel/new');
+    const formWidth = await page.locator('.form').evaluate((element) => element.getBoundingClientRect().width);
+    expect(formWidth).toBeLessThanOrEqual(720);
+    for (const control of await page.locator('.form .input, .form .button').all()) {
+      await expect(control).toBeVisible();
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
+test('文字放大后页面和底部导航不裁切或遮挡控件', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.addInitScript(() => { document.documentElement.style.fontSize = '32px'; });
+  await page.goto('/');
+  for (const [route, heading] of [
+    ['/', '爱车记录'],
+    ['/#/maintenance/new', '记保养'],
+    ['/#/fuel/new', '记加油'],
+    ['/#/history', '历史记录'],
+    ['/#/backup', '备份与恢复'],
+  ]) {
+    await page.goto(route);
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    const clipped = await page.evaluate(() => {
+      const selectors = 'main h1, main h2, main p, main label:not(.visually-hidden), main input:not(.visually-hidden), main textarea, main button, main a, nav a';
+      return Array.from(document.querySelectorAll<HTMLElement>(selectors))
+        .filter((element) => element.getClientRects().length > 0)
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.left < -1 || rect.right > innerWidth + 1 || element.scrollWidth > element.clientWidth + 1;
+        })
+        .map((element) => `${element.tagName}.${element.className}: ${element.textContent?.trim()}`);
+    });
+    expect(clipped).toEqual([]);
+    await expectNoHorizontalOverflow(page);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const overlap = await page.evaluate(() => {
+      const main = document.querySelector('main')!.getBoundingClientRect();
+      const nav = document.querySelector('.tabbar')!.getBoundingClientRect();
+      return main.bottom > nav.top + 1;
+    });
+    expect(overlap).toBe(false);
+  }
+});

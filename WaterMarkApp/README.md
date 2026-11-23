@@ -103,3 +103,5 @@ Then open each page; each should show **ALL PASSED**:
   proportionally with image size, so the saved image matches the preview.
 - <http://localhost:8000/tests/i18n.test.html> checks browser-language detection, and that the English
   and Chinese translations have the same set of strings and none is empty.
+- <http://localhost:8000/tests/responsive.test.html> checks responsive layout, enlarged text, preview
+  resizing, and watermark positioning in the exported image.

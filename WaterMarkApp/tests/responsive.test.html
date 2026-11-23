@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Responsive layout tests</title>
+</head>
+<body>
+  <h1>Responsive layout tests</h1>
+  <p id="summary">Running…</p>
+  <ul id="results"></ul>
+  <script src="load-app.js"></script>
+  <script>
+    loadApp(async function (app) {
+      'use strict';
+      var results = [];
+      var frame = app.frameElement;
+      var doc = app.document;
+
+      function check(name, ok, detail) {
+        results.push({ name: name, ok: !!ok, detail: detail || '' });
+      }
+
+      function settle() {
+        return new Promise(function (resolve) {
+          setTimeout(function () { app.requestAnimationFrame(resolve); }, 100);
+        });
+      }
+
+      async function waitFor(predicate, label) {
+        for (var i = 0; i < 100; i++) {
+          if (predicate()) return;
+          await new Promise(function (resolve) { setTimeout(resolve, 50); });
+        }
+        throw new Error('Timed out: ' + label);
+      }
+
+      function brightBounds(canvas) {
+        var width = canvas.width;
+        var height = canvas.height;
+        var pixels = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+        var left = width, top = height, right = -1, bottom = -1;
+        for (var y = 0; y < height; y++) {
+          for (var x = 0; x < width; x++) {
+            var offset = (y * width + x) * 4;
+            if (pixels[offset] > 100 && pixels[offset + 1] > 100 && pixels[offset + 2] > 100) {
+              left = Math.min(left, x);
+              right = Math.max(right, x);
+              top = Math.min(top, y);
+              bottom = Math.max(bottom, y);
+            }
+          }
+        }
+        return right < 0 ? null : [left / width, top / height, right / width, bottom / height];
+      }
+
+      try {
+        frame.height = '900';
+        for (var font of [16, 32]) {
+          doc.documentElement.style.fontSize = font + 'px';
+          for (var width of [360, 390, 768, 1024, 1440]) {
+            frame.width = String(width);
+            await settle();
+            for (var lang of ['en', 'zh-CN']) {
+              doc.getElementById('lang').value = lang;
+              doc.getElementById('lang').dispatchEvent(new app.Event('change', { bubbles: true }));
+              await settle();
+              var main = doc.querySelector('main');
+              var preview = doc.getElementById('preview-wrap').getBoundingClientRect();
+              var controls = doc.getElementById('controls').getBoundingClientRect();
+              var prefix = width + 'px / ' + font + 'px / ' + lang;
+              var clipped = Array.from(doc.querySelectorAll('h1, .brand, label, input, select, button, .footnote'))
+                .filter(function (element) {
+                  return element.getClientRects().length && app.getComputedStyle(element).visibility !== 'hidden';
+                })
+                .filter(function (element) {
+                  var rect = element.getBoundingClientRect();
+                  return rect.left < -1 || rect.right > width + 1 || element.scrollWidth > element.clientWidth + 1;
+                })
+                .map(function (element) { return element.id || element.className || element.tagName; });
+              check(prefix + ': no clipped controls', clipped.length === 0 && doc.documentElement.scrollWidth <= width, clipped.join(', '));
+              if (font === 16 && width <= 390) {
+                var style = app.getComputedStyle(main);
+                check(prefix + ': mobile padding and text', parseFloat(style.paddingLeft) <= 12 &&
+                  parseFloat(style.paddingRight) <= 12 && parseFloat(app.getComputedStyle(doc.body).fontSize) >= 17);
+              }
+              if (font === 16 && width === 1440) {
+                check(prefix + ': desktop workspace', main.getBoundingClientRect().width >= 1000 && preview.right <= controls.left);
+              }
+              if (width <= 390) {
+                check(prefix + ': stacked workspace', preview.bottom <= controls.top);
+              }
+              var targets = Array.from(doc.querySelectorAll('.file-button, .button:not([hidden]), input:not([type=file]), select'));
+              check(prefix + ': touch targets', targets.every(function (element) {
+                return element.getBoundingClientRect().height >= 44;
+              }));
+            }
+          }
+        }
+
+        doc.documentElement.style.fontSize = '16px';
+        doc.getElementById('lang').value = 'en';
+        doc.getElementById('lang').dispatchEvent(new app.Event('change', { bubbles: true }));
+        for (var dimensions of [[1600, 1200], [1200, 1600]]) {
+          frame.width = '360';
+          await settle();
+          var source = doc.createElement('canvas');
+          source.width = dimensions[0];
+          source.height = dimensions[1];
+          source.getContext('2d').fillRect(0, 0, source.width, source.height);
+          var blob = await new Promise(function (resolve) { source.toBlob(resolve, 'image/png'); });
+          var file = new app.File([blob], 'photo.png', { type: 'image/png' });
+          var transfer = new app.DataTransfer();
+          transfer.items.add(file);
+          var input = doc.getElementById('file-input');
+          input.files = transfer.files;
+          input.dispatchEvent(new app.Event('change', { bubbles: true }));
+          var canvas = doc.getElementById('preview');
+          await waitFor(function () {
+            return !doc.getElementById('save').disabled && !canvas.hidden &&
+              Math.abs(canvas.width / canvas.height - dimensions[0] / dimensions[1]) < 0.02;
+          }, dimensions.join('x') + ' image load');
+          await settle();
+          var mobileWidth = canvas.getBoundingClientRect().width;
+          frame.width = '1440';
+          await settle();
+          var desktop = canvas.getBoundingClientRect();
+          check(dimensions.join('x') + ': preview resizes without distortion',
+            desktop.width > mobileWidth && Math.abs(desktop.width / desktop.height - dimensions[0] / dimensions[1]) < 0.02);
+
+          var oldWidth = canvas.width;
+          doc.querySelector('main').style.width = '35%';
+          await waitFor(function () { return canvas.width < oldWidth; }, dimensions.join('x') + ' smaller container');
+          check(dimensions.join('x') + ': preview responds to container resize', canvas.width < oldWidth);
+          doc.querySelector('main').style.width = '';
+          await waitFor(function () { return canvas.width === oldWidth; }, dimensions.join('x') + ' restored container');
+
+          doc.getElementById('text').value = 'FENG';
+          doc.getElementById('text').dispatchEvent(new app.Event('input', { bubbles: true }));
+          doc.getElementById('opacity').value = '100';
+          doc.getElementById('opacity').dispatchEvent(new app.Event('input', { bubbles: true }));
+          await settle();
+          var previewBounds = brightBounds(canvas);
+          var downloadUrl = null;
+          var originalClick = app.HTMLAnchorElement.prototype.click;
+          app.HTMLAnchorElement.prototype.click = function () { downloadUrl = this.href; };
+          doc.getElementById('save').click();
+          await waitFor(function () { return downloadUrl !== null; }, dimensions.join('x') + ' export');
+          var exported = await app.createImageBitmap(await (await app.fetch(downloadUrl)).blob());
+          app.HTMLAnchorElement.prototype.click = originalClick;
+          var output = doc.createElement('canvas');
+          output.width = exported.width;
+          output.height = exported.height;
+          output.getContext('2d').drawImage(exported, 0, 0);
+          var outputBounds = brightBounds(output);
+          check(dimensions.join('x') + ': export retains original dimensions',
+            exported.width === dimensions[0] && exported.height === dimensions[1]);
+          check(dimensions.join('x') + ': preview and export watermark positions match', previewBounds && outputBounds &&
+            previewBounds.every(function (value, index) { return Math.abs(value - outputBounds[index]) < 0.02; }),
+            JSON.stringify({ preview: previewBounds, output: outputBounds }));
+          exported.close();
+        }
+      } catch (error) {
+        check('test execution', false, error.message);
+      }
+
+      var failed = results.filter(function (result) { return !result.ok; });
+      var list = document.getElementById('results');
+      results.forEach(function (result) {
+        var item = document.createElement('li');
+        item.textContent = (result.ok ? 'PASS: ' : 'FAIL: ') + result.name + (result.detail ? ' — ' + result.detail : '');
+        list.appendChild(item);
+      });
+      document.getElementById('summary').textContent = failed.length
+        ? failed.length + ' FAILED (' + results.length + ' assertions)'
+        : 'ALL PASSED (' + results.length + ' assertions)';
+      document.body.setAttribute('data-result', failed.length ? 'fail' : 'pass');
+    });
+  </script>
+</body>
+</html>

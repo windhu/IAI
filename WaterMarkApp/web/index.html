@@ -28,13 +28,14 @@ body {
     "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
   background: #f3f4f6;
   color: #111827;
-  overflow-x: hidden;
+  font-size: 1.0625rem;
+  overflow-wrap: anywhere;
 }
 
 main {
-  max-width: 720px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -50,6 +51,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -70,15 +72,12 @@ h1 {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  white-space: nowrap;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 select.lang-select {
   width: auto;
-  flex: none;
+  max-width: 100%;
   min-height: 44px;
 }
 
@@ -139,8 +138,17 @@ select.lang-select {
   color: #1e3a8a;
 }
 
+.workspace,
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
 .preview-wrap {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   min-height: 200px;
@@ -174,6 +182,8 @@ select.lang-select {
 .field > span {
   font-weight: 600;
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   justify-content: space-between;
 }
 
@@ -186,6 +196,7 @@ select.lang-select {
   display: flex;
   gap: 16px;
   align-items: flex-end;
+  flex-wrap: wrap;
 }
 
 .grow {
@@ -195,6 +206,7 @@ select.lang-select {
 input[type="text"],
 select {
   min-height: 48px;
+  min-width: 0;
   width: 100%;
   padding: 0 12px;
   border: 1px solid #d1d5db;
@@ -221,6 +233,7 @@ input[type="color"] {
 .actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .actions .button {
@@ -232,6 +245,16 @@ input[type="color"] {
   font-size: 0.85rem;
   color: #6b7280;
   text-align: center;
+}
+
+@media (min-width: 960px) {
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  .preview-wrap { align-self: stretch; }
 }
   </style>
 </head>
@@ -256,50 +279,54 @@ input[type="color"] {
     <p id="error" class="error" role="alert" hidden></p>
     <p id="notice" class="notice" role="status" hidden></p>
 
-    <div id="preview-wrap" class="preview-wrap">
-      <p id="placeholder" class="placeholder" data-i18n="noPhoto">No photo selected</p>
-      <canvas id="preview" hidden></canvas>
-    </div>
-
-    <form id="controls" class="controls" autocomplete="off" onsubmit="return false">
-      <label class="field">
-        <span><span data-i18n="textLabel">Watermark text</span></span>
-        <input id="text" type="text" placeholder="e.g. © Your Name" data-i18n-placeholder="textPlaceholder">
-      </label>
-
-      <label class="field">
-        <span><span data-i18n="sizeLabel">Font size</span> <output id="size-value">5%</output></span>
-        <input id="size" type="range" min="1" max="20" step="0.5" value="5">
-      </label>
-
-      <div class="row">
-        <label class="field color-field">
-          <span><span data-i18n="colorLabel">Color</span></span>
-          <input id="color" type="color" value="#ffffff">
-        </label>
-
-        <label class="field grow">
-          <span><span data-i18n="opacityLabel">Opacity</span> <output id="opacity-value">50%</output></span>
-          <input id="opacity" type="range" min="0" max="100" step="1" value="50">
-        </label>
+    <div class="workspace">
+      <div id="preview-wrap" class="preview-wrap">
+        <p id="placeholder" class="placeholder" data-i18n="noPhoto">No photo selected</p>
+        <canvas id="preview" hidden></canvas>
       </div>
 
-      <label class="field">
-        <span><span data-i18n="positionLabel">Position</span></span>
-        <select id="position">
-          <option value="top-left" data-i18n="positionTopLeft">Top left</option>
-          <option value="top-right" data-i18n="positionTopRight">Top right</option>
-          <option value="center" data-i18n="positionCenter">Center</option>
-          <option value="bottom-left" data-i18n="positionBottomLeft">Bottom left</option>
-          <option value="bottom-right" data-i18n="positionBottomRight" selected>Bottom right</option>
-          <option value="tiled" data-i18n="positionTiled">Tiled</option>
-        </select>
-      </label>
-    </form>
+      <div class="settings">
+        <form id="controls" class="controls" autocomplete="off" onsubmit="return false">
+          <label class="field">
+            <span><span data-i18n="textLabel">Watermark text</span></span>
+            <input id="text" type="text" placeholder="e.g. © Your Name" data-i18n-placeholder="textPlaceholder">
+          </label>
 
-    <div class="actions">
-      <button id="save" class="button primary" type="button" data-i18n="save" disabled>Save</button>
-      <button id="share" class="button" type="button" data-i18n="share" disabled hidden>Share</button>
+          <label class="field">
+            <span><span data-i18n="sizeLabel">Font size</span> <output id="size-value">5%</output></span>
+            <input id="size" type="range" min="1" max="20" step="0.5" value="5">
+          </label>
+
+          <div class="row">
+            <label class="field color-field">
+              <span><span data-i18n="colorLabel">Color</span></span>
+              <input id="color" type="color" value="#ffffff">
+            </label>
+
+            <label class="field grow">
+              <span><span data-i18n="opacityLabel">Opacity</span> <output id="opacity-value">50%</output></span>
+              <input id="opacity" type="range" min="0" max="100" step="1" value="50">
+            </label>
+          </div>
+
+          <label class="field">
+            <span><span data-i18n="positionLabel">Position</span></span>
+            <select id="position">
+              <option value="top-left" data-i18n="positionTopLeft">Top left</option>
+              <option value="top-right" data-i18n="positionTopRight">Top right</option>
+              <option value="center" data-i18n="positionCenter">Center</option>
+              <option value="bottom-left" data-i18n="positionBottomLeft">Bottom left</option>
+              <option value="bottom-right" data-i18n="positionBottomRight" selected>Bottom right</option>
+              <option value="tiled" data-i18n="positionTiled">Tiled</option>
+            </select>
+          </label>
+        </form>
+
+        <div class="actions">
+          <button id="save" class="button primary" type="button" data-i18n="save" disabled>Save</button>
+          <button id="share" class="button" type="button" data-i18n="share" disabled hidden>Share</button>
+        </div>
+      </div>
     </div>
 
     <p class="footnote" data-i18n="footnote">Photos are processed on your device and never uploaded.</p>
@@ -946,6 +973,9 @@ input[type="color"] {
   });
 
   window.addEventListener('resize', scheduleRender);
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(scheduleRender).observe(el.wrap);
+  }
 
   el.lang.addEventListener('change', function () {
     applyLanguage(el.lang.value);

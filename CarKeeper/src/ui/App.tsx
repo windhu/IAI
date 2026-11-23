@@ -97,6 +97,7 @@ function Shell() {
   const route = useRoute();
   const { load, reload, flash, setFlash } = useRecords();
   const routeKey = JSON.stringify(route);
+  const narrow = ['new-maintenance', 'new-fuel', 'edit', 'backup'].includes(route.name);
 
   useEffect(() => {
     if (!flash) return;
@@ -107,7 +108,7 @@ function Shell() {
   return (
     <>
       <UpdateBanner onUpdate={() => void installUpdate()} />
-      <main className="main">
+      <main className={`main${narrow ? ' main-narrow' : ''}`}>
         {load.status === 'error' && <LoadErrorBanner message={load.message} onRetry={() => void reload()} />}
         {flash && <Notice kind="success">{flash}</Notice>}
         <Screen key={routeKey} route={route} />
