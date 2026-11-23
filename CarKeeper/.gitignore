@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-sub/
+public/ocr/
+test-results/
+playwright-report/
+ocr-samples/
+*.local

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Watermark layout tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    .pass { color: #166534; }
+    .fail { color: #991b1b; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Watermark layout tests</h1>
+  <p id="summary">Running…</p>
+  <ul id="results"></ul>
+
+  <script src="load-app.js"></script>
+  <script>
+    loadApp(function (app) {
+      'use strict';
+      var core = app.WatermarkCore;
+      var results = [];
+      var EPS = 1e-6;
+
+      function check(name, ok, detail) {
+        results.push({ name: name, ok: !!ok, detail: detail || '' });
+      }
+
+      function close(a, b) {
+        return Math.abs(a - b) <= EPS * Math.max(1, Math.abs(a), Math.abs(b));
+      }
+
+      function settingsFor(position) {
+        var s = {};
+        for (var k in core.DEFAULT_SETTINGS) { s[k] = core.DEFAULT_SETTINGS[k]; }
+        s.text = '© Alice';
+        s.position = position;
+        return s;
+      }
+
+      var metrics = { width: 340 };
+      var positions = ['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right', 'tiled'];
+
+      positions.forEach(function (position) {
+        var s = settingsFor(position);
+        var small = core.computeLayout(s, 400, 300, metrics);
+        var large = core.computeLayout(s, 4000, 3000, metrics);
+
+        check(position + ': font size scales 10x', close(large.fontSize, small.fontSize * 10),
+          small.fontSize + ' vs ' + large.fontSize);
+        check(position + ': same item count', small.items.length === large.items.length && small.items.length > 0,
+          small.items.length + ' vs ' + large.items.length);
+        check(position + ': same rotation', small.rotation === large.rotation);
+        check(position + ': origin scales 10x',
+          close(large.originX, small.originX * 10) && close(large.originY, small.originY * 10));
+
+        var proportional = small.items.every(function (item, i) {
+          return close(large.items[i].x, item.x * 10) && close(large.items[i].y, item.y * 10);
+        });
+        check(position + ': coordinates scale 10x', proportional);
+
+        if (position !== 'tiled') {
+          var p = small.items[0];
+          check(position + ': anchor inside image', p.x > 0 && p.x < 400 && p.y > 0 && p.y < 300,
+            '(' + p.x + ', ' + p.y + ')');
+        }
+      });
+
+      (function tiledCoversCorners() {
+        var s = settingsFor('tiled');
+        var w = 400, h = 300;
+        var layout = core.computeLayout(s, w, h, metrics);
+        var cos = Math.cos(layout.rotation), sin = Math.sin(layout.rotation);
+        var points = layout.items.map(function (it) {
+          return { x: layout.originX + it.x * cos - it.y * sin, y: layout.originY + it.x * sin + it.y * cos };
+        });
+        var reach = layout.fontSize * 4;
+        [[0, 0], [w, 0], [0, h], [w, h]].forEach(function (corner) {
+          var near = points.some(function (p) {
+            return Math.abs(p.x - corner[0]) < reach && Math.abs(p.y - corner[1]) < reach;
+          });
+          check('tiled: covers corner (' + corner[0] + ', ' + corner[1] + ')', near);
+        });
+        check('tiled: rotated diagonally', layout.rotation !== 0);
+      })();
+
+      check('defaults: empty text, white, 50% opacity, bottom-right',
+        core.DEFAULT_SETTINGS.text === '' && core.DEFAULT_SETTINGS.color === '#ffffff' &&
+        core.DEFAULT_SETTINGS.opacity === 50 && core.DEFAULT_SETTINGS.position === 'bottom-right');
+
+      var list = document.getElementById('results');
+      var failed = 0;
+      results.forEach(function (r) {
+        if (!r.ok) { failed++; }
+        var li = document.createElement('li');
+        li.className = r.ok ? 'pass' : 'fail';
+        li.textContent = (r.ok ? 'PASS ' : 'FAIL ') + r.name + (r.detail && !r.ok ? ' — ' + r.detail : '');
+        list.appendChild(li);
+      });
+      var summary = document.getElementById('summary');
+      summary.textContent = failed === 0
+        ? 'ALL PASSED (' + results.length + ' assertions)'
+        : failed + ' of ' + results.length + ' assertions FAILED';
+      summary.className = failed === 0 ? 'pass' : 'fail';
+      document.body.setAttribute('data-result', failed === 0 ? 'pass' : 'fail');
+    });
+  </script>
+</body>
+</html>

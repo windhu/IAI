@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f2937">
+  <title>Photo Watermark</title>
+  <link rel="icon" href="data:,">
+  <style>
+/* ===== Styles ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+  overflow-x: hidden;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  min-width: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.brand-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.brand {
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+select.lang-select {
+  width: auto;
+  flex: none;
+  min-height: 44px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.file-button {
+  position: relative;
+  width: 100%;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  cursor: pointer;
+}
+
+.error,
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notice {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.preview-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  border-radius: 12px;
+  background: repeating-conic-gradient(#e5e7eb 0% 25%, #fff 0% 50%) 50% / 20px 20px;
+  overflow: hidden;
+}
+
+.preview-wrap canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.placeholder {
+  color: #6b7280;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field > span {
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+}
+
+.field output {
+  font-weight: 400;
+  color: #4b5563;
+}
+
+.row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.grow {
+  flex: 1;
+}
+
+input[type="text"],
+select {
+  min-height: 48px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+
+input[type="range"] {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+}
+
+input[type="color"] {
+  width: 64px;
+  height: 48px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.actions .button {
+  flex: 1;
+}
+
+.footnote {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+  text-align: center;
+}
+  </style>
+</head>
+<body>
+  <main id="app">
+    <header class="app-header">
+      <div class="brand-group">
+        <h1 data-i18n="heading">Photo Watermark</h1>
+        <p class="brand" data-i18n="brand">Made by Feng Ge</p>
+      </div>
+      <select id="lang" class="lang-select" aria-label="Language" data-i18n-aria-label="languageLabel">
+        <option value="en">English</option>
+        <option value="zh-CN" lang="zh-CN">中文</option>
+      </select>
+    </header>
+
+    <label class="button primary file-button">
+      <span data-i18n="choosePhoto">Choose photo</span>
+      <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp">
+    </label>
+
+    <p id="error" class="error" role="alert" hidden></p>
+    <p id="notice" class="notice" role="status" hidden></p>
+
+    <div id="preview-wrap" class="preview-wrap">
+      <p id="placeholder" class="placeholder" data-i18n="noPhoto">No photo selected</p>
+      <canvas id="preview" hidden></canvas>
+    </div>
+
+    <form id="controls" class="controls" autocomplete="off" onsubmit="return false">
+      <label class="field">
+        <span><span data-i18n="textLabel">Watermark text</span></span>
+        <input id="text" type="text" placeholder="e.g. © Your Name" data-i18n-placeholder="textPlaceholder">
+      </label>
+
+      <label class="field">
+        <span><span data-i18n="sizeLabel">Font size</span> <output id="size-value">5%</output></span>
+        <input id="size" type="range" min="1" max="20" step="0.5" value="5">
+      </label>
+
+      <div class="row">
+        <label class="field color-field">
+          <span><span data-i18n="colorLabel">Color</span></span>
+          <input id="color" type="color" value="#ffffff">
+        </label>
+
+        <label class="field grow">
+          <span><span data-i18n="opacityLabel">Opacity</span> <output id="opacity-value">50%</output></span>
+          <input id="opacity" type="range" min="0" max="100" step="1" value="50">
+        </label>
+      </div>
+
+      <label class="field">
+        <span><span data-i18n="positionLabel">Position</span></span>
+        <select id="position">
+          <option value="top-left" data-i18n="positionTopLeft">Top left</option>
+          <option value="top-right" data-i18n="positionTopRight">Top right</option>
+          <option value="center" data-i18n="positionCenter">Center</option>
+          <option value="bottom-left" data-i18n="positionBottomLeft">Bottom left</option>
+          <option value="bottom-right" data-i18n="positionBottomRight" selected>Bottom right</option>
+          <option value="tiled" data-i18n="positionTiled">Tiled</option>
+        </select>
+      </label>
+    </form>
+
+    <div class="actions">
+      <button id="save" class="button primary" type="button" data-i18n="save" disabled>Save</button>
+      <button id="share" class="button" type="button" data-i18n="share" disabled hidden>Share</button>
+    </div>
+
+    <p class="footnote" data-i18n="footnote">Photos are processed on your device and never uploaded.</p>
+  </main>
+
+  <script>
+(function () {
+  'use strict';
+
+  // ===== Watermark core =====
+
+  var FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", ' +
+    '"Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif';
+  var MEASURE_FONT_SIZE = 100;
+  var MARGIN_PCT = 3;
+  var TILE_ANGLE = -Math.PI / 6;
+  var MAX_FALLBACK_PIXELS = 16777216;
+
+  var DEFAULT_SETTINGS = {
+    text: '',
+    sizePct: 5,
+    color: '#ffffff',
+    opacity: 50,
+    position: 'bottom-right'
+  };
+
+  // Pure layout: all lengths derive from the image's shorter side, so results scale
+  // linearly with image size. textMetrics.width is the text width at MEASURE_FONT_SIZE px.
+  function computeLayout(settings, width, height, textMetrics) {
+    var shortSide = Math.min(width, height);
+    var fontSize = shortSide * settings.sizePct / 100;
+    var margin = shortSide * MARGIN_PCT / 100;
+    var textWidth = textMetrics.width * fontSize / MEASURE_FONT_SIZE;
+    var textHeight = fontSize;
+    var halfW = textWidth / 2;
+    var halfH = textHeight / 2;
+
+    var layout = {
+      fontSize: fontSize,
+      rotation: 0,
+      originX: 0,
+      originY: 0,
+      items: []
+    };
+
+    switch (settings.position) {
+      case 'top-left':
+        layout.items.push({ x: margin + halfW, y: margin + halfH });
+        break;
+      case 'top-right':
+        layout.items.push({ x: width - margin - halfW, y: margin + halfH });
+        break;
+      case 'center':
+        layout.items.push({ x: width / 2, y: height / 2 });
+        break;
+      case 'bottom-left':
+        layout.items.push({ x: margin + halfW, y: height - margin - halfH });
+        break;
+      case 'tiled': {
+        // Items are relative to the image center in a rotated frame; the grid spans the
+        // image diagonal so every corner stays covered after rotation.
+        var diagonal = Math.sqrt(width * width + height * height);
+        var colStep = textWidth + fontSize * 2;
+        var rowStep = fontSize * 3;
+        var rows = Math.ceil(diagonal / 2 / rowStep);
+        var cols = Math.ceil((diagonal / 2 + colStep) / colStep);
+        layout.rotation = TILE_ANGLE;
+        layout.originX = width / 2;
+        layout.originY = height / 2;
+        for (var r = -rows; r <= rows; r++) {
+          var offset = (r % 2 === 0) ? 0 : colStep / 2;
+          for (var c = -cols; c <= cols; c++) {
+            layout.items.push({ x: c * colStep + offset, y: r * rowStep });
+          }
+        }
+        break;
+      }
+      case 'bottom-right':
+      default:
+        layout.items.push({ x: width - margin - halfW, y: height - margin - halfH });
+        break;
+    }
+
+    return layout;
+  }
+
+  function renderWatermark(ctx, image, settings, width, height) {
+    ctx.save();
+    ctx.clearRect(0, 0, width, height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, width, height);
+
+    var text = settings.text.trim();
+    if (text && settings.sizePct > 0) {
+      ctx.font = MEASURE_FONT_SIZE + 'px ' + FONT_FAMILY;
+      var metrics = { width: ctx.measureText(text).width };
+      var layout = computeLayout(settings, width, height, metrics);
+
+      ctx.font = layout.fontSize + 'px ' + FONT_FAMILY;
+      ctx.fillStyle = settings.color;
+      ctx.globalAlpha = Math.max(0, Math.min(100, settings.opacity)) / 100;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.translate(layout.originX, layout.originY);
+      ctx.rotate(layout.rotation);
+      for (var i = 0; i < layout.items.length; i++) {
+        ctx.fillText(text, layout.items[i].x, layout.items[i].y);
+      }
+    }
+    ctx.restore();
+  }
+
+  window.WatermarkCore = {
+    DEFAULT_SETTINGS: DEFAULT_SETTINGS,
+    MEASURE_FONT_SIZE: MEASURE_FONT_SIZE,
+    computeLayout: computeLayout,
+    renderWatermark: renderWatermark
+  };
+
+  // ===== Localization =====
+
+  var DEFAULT_LANGUAGE = 'en';
+  var LANGUAGE_STORAGE_KEY = 'watermark.lang';
+
+  var MESSAGES = {
+    en: {
+      title: 'Photo Watermark',
+      heading: 'Photo Watermark',
+      brand: 'Made by Feng Ge',
+      languageLabel: 'Language',
+      choosePhoto: 'Choose photo',
+      noPhoto: 'No photo selected',
+      textLabel: 'Watermark text',
+      textPlaceholder: 'e.g. © Your Name',
+      sizeLabel: 'Font size',
+      colorLabel: 'Color',
+      opacityLabel: 'Opacity',
+      positionLabel: 'Position',
+      positionTopLeft: 'Top left',
+      positionTopRight: 'Top right',
+      positionCenter: 'Center',
+      positionBottomLeft: 'Bottom left',
+      positionBottomRight: 'Bottom right',
+      positionTiled: 'Tiled',
+      save: 'Save',
+      share: 'Share',
+      footnote: 'Photos are processed on your device and never uploaded.',
+      unnamedFile: 'This file',
+      errorDecode: '"{name}" could not be opened as an image. Please choose a JPEG, PNG, or WebP photo.',
+      errorExport: 'Sorry, the watermarked image could not be created.',
+      noticeResized: 'This photo was too large for your browser, so it was saved at {width}×{height}.'
+    },
+    'zh-CN': {
+      title: '照片水印',
+      heading: '照片水印',
+      brand: '峰哥出品',
+      languageLabel: '语言',
+      choosePhoto: '选择照片',
+      noPhoto: '未选择照片',
+      textLabel: '水印文字',
+      textPlaceholder: '例如：© 你的名字',
+      sizeLabel: '字号',
+      colorLabel: '颜色',
+      opacityLabel: '不透明度',
+      positionLabel: '位置',
+      positionTopLeft: '左上',
+      positionTopRight: '右上',
+      positionCenter: '居中',
+      positionBottomLeft: '左下',
+      positionBottomRight: '右下',
+      positionTiled: '平铺',
+      save: '保存',
+      share: '分享',
+      footnote: '照片仅在您的设备上处理，不会上传。',
+      unnamedFile: '该文件',
+      errorDecode: '无法将“{name}”作为图片打开，请选择 JPEG、PNG 或 WebP 格式的照片。',
+      errorExport: '抱歉，无法生成带水印的图片。',
+      noticeResized: '照片过大，浏览器无法处理，已按 {width}×{height} 保存。'
+    }
+  };
+
+  function isSupportedLanguage(lang) {
+    return Object.prototype.hasOwnProperty.call(MESSAGES, lang);
+  }
+
+  function resolveLanguage(saved, browserLanguages) {
+    if (saved && isSupportedLanguage(saved)) {
+      return saved;
+    }
+    var list = browserLanguages || [];
+    for (var i = 0; i < list.length; i++) {
+      var code = String(list[i] || '');
+      if (/^zh\b/i.test(code)) {
+        return 'zh-CN';
+      }
+      if (/^en\b/i.test(code)) {
+        return 'en';
+      }
+    }
+    return DEFAULT_LANGUAGE;
+  }
+
+  function translate(lang, key, params) {
+    var table = MESSAGES[lang] || MESSAGES[DEFAULT_LANGUAGE];
+    var text = Object.prototype.hasOwnProperty.call(table, key) ? table[key] : MESSAGES[DEFAULT_LANGUAGE][key];
+    if (text === undefined) {
+      return key;
+    }
+    return text.replace(/\{(\w+)\}/g, function (match, name) {
+      return params && params[name] !== undefined && params[name] !== null ? String(params[name]) : match;
+    });
+  }
+
+  var currentLanguage = DEFAULT_LANGUAGE;
+
+  function t(key, params) {
+    return translate(currentLanguage, key, params);
+  }
+
+  window.WatermarkI18n = {
+    MESSAGES: MESSAGES,
+    DEFAULT_LANGUAGE: DEFAULT_LANGUAGE,
+    resolveLanguage: resolveLanguage,
+    translate: translate,
+    t: t
+  };
+
+  // ===== UI (skipped when the app DOM is absent) =====
+
+  if (!document.getElementById('app')) {
+    return;
+  }
+
+  var el = {
+    fileInput: document.getElementById('file-input'),
+    error: document.getElementById('error'),
+    notice: document.getElementById('notice'),
+    wrap: document.getElementById('preview-wrap'),
+    placeholder: document.getElementById('placeholder'),
+    canvas: document.getElementById('preview'),
+    text: document.getElementById('text'),
+    size: document.getElementById('size'),
+    sizeValue: document.getElementById('size-value'),
+    color: document.getElementById('color'),
+    opacity: document.getElementById('opacity'),
+    opacityValue: document.getElementById('opacity-value'),
+    position: document.getElementById('position'),
+    save: document.getElementById('save'),
+    share: document.getElementById('share'),
+    lang: document.getElementById('lang')
+  };
+
+  var settings = {
+    text: DEFAULT_SETTINGS.text,
+    sizePct: DEFAULT_SETTINGS.sizePct,
+    color: DEFAULT_SETTINGS.color,
+    opacity: DEFAULT_SETTINGS.opacity,
+    position: DEFAULT_SETTINGS.position
+  };
+
+  var photo = null; // { image, width, height, name, type }
+  var loadToken = 0;
+  var renderPending = false;
+  var busy = false;
+  var shareSupported = detectShareSupport();
+
+  function detectShareSupport() {
+    try {
+      if (!navigator.share || !navigator.canShare || typeof File !== 'function') {
+        return false;
+      }
+      var probe = new File([new Blob(['x'], { type: 'image/png' })], 'probe.png', { type: 'image/png' });
+      return navigator.canShare({ files: [probe] });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Runtime messages are kept as { key, params } so they can be re-rendered on language switch.
+  var errorMessage = null;
+  var noticeMessage = null;
+
+  function renderMessage(node, message) {
+    var params = null;
+    if (message) {
+      params = {};
+      for (var name in message.params) {
+        if (Object.prototype.hasOwnProperty.call(message.params, name)) {
+          params[name] = message.params[name];
+        }
+      }
+      if (message.key === 'errorDecode' && !params.name) {
+        params.name = t('unnamedFile');
+      }
+    }
+    node.textContent = message ? t(message.key, params) : '';
+    node.hidden = !message;
+  }
+
+  function showError(key, params) {
+    errorMessage = key ? { key: key, params: params || {} } : null;
+    renderMessage(el.error, errorMessage);
+  }
+
+  function showNotice(key, params) {
+    noticeMessage = key ? { key: key, params: params || {} } : null;
+    renderMessage(el.notice, noticeMessage);
+  }
+
+  function readStoredLanguage() {
+    try {
+      return window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function storeLanguage(lang) {
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    } catch (e) {
+      // Storage may be blocked (file://, privacy modes); the choice then lasts for this session only.
+    }
+  }
+
+  function browserLanguages() {
+    if (navigator.languages && navigator.languages.length) {
+      return navigator.languages;
+    }
+    return navigator.language ? [navigator.language] : [];
+  }
+
+  function applyLanguage(lang) {
+    currentLanguage = isSupportedLanguage(lang) ? lang : DEFAULT_LANGUAGE;
+    document.documentElement.lang = currentLanguage;
+    document.title = t('title');
+
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
+    }
+    nodes = document.querySelectorAll('[data-i18n-placeholder]');
+    for (i = 0; i < nodes.length; i++) {
+      nodes[i].setAttribute('placeholder', t(nodes[i].getAttribute('data-i18n-placeholder')));
+    }
+    nodes = document.querySelectorAll('[data-i18n-aria-label]');
+    for (i = 0; i < nodes.length; i++) {
+      nodes[i].setAttribute('aria-label', t(nodes[i].getAttribute('data-i18n-aria-label')));
+    }
+
+    el.lang.value = currentLanguage;
+    renderMessage(el.error, errorMessage);
+    renderMessage(el.notice, noticeMessage);
+  }
+
+  function syncControls() {
+    el.text.value = settings.text;
+    el.size.value = String(settings.sizePct);
+    el.color.value = settings.color;
+    el.opacity.value = String(settings.opacity);
+    el.position.value = settings.position;
+    el.sizeValue.textContent = settings.sizePct + '%';
+    el.opacityValue.textContent = settings.opacity + '%';
+  }
+
+  function updateButtons() {
+    var disabled = !photo || busy;
+    el.save.disabled = disabled;
+    el.share.disabled = disabled;
+    el.share.hidden = !shareSupported;
+  }
+
+  function readSettings() {
+    settings.text = el.text.value;
+    settings.sizePct = parseFloat(el.size.value) || DEFAULT_SETTINGS.sizePct;
+    settings.color = el.color.value;
+    settings.opacity = parseInt(el.opacity.value, 10);
+    if (isNaN(settings.opacity)) {
+      settings.opacity = DEFAULT_SETTINGS.opacity;
+    }
+    settings.position = el.position.value;
+    el.sizeValue.textContent = settings.sizePct + '%';
+    el.opacityValue.textContent = settings.opacity + '%';
+  }
+
+  function scheduleRender() {
+    if (renderPending) {
+      return;
+    }
+    renderPending = true;
+    window.requestAnimationFrame(function () {
+      renderPending = false;
+      renderPreview();
+    });
+  }
+
+  function renderPreview() {
+    if (!photo) {
+      el.canvas.hidden = true;
+      el.placeholder.hidden = false;
+      return;
+    }
+    el.canvas.hidden = false;
+    el.placeholder.hidden = true;
+
+    var wrapWidth = el.wrap.clientWidth || photo.width;
+    var maxHeight = Math.max(200, window.innerHeight * 0.6);
+    var cssWidth = Math.min(wrapWidth, maxHeight * photo.width / photo.height, photo.width);
+    var cssHeight = cssWidth * photo.height / photo.width;
+    var dpr = window.devicePixelRatio || 1;
+
+    el.canvas.style.width = cssWidth + 'px';
+    el.canvas.style.height = cssHeight + 'px';
+    var w = Math.max(1, Math.round(cssWidth * dpr));
+    var h = Math.max(1, Math.round(cssHeight * dpr));
+    if (el.canvas.width !== w || el.canvas.height !== h) {
+      el.canvas.width = w;
+      el.canvas.height = h;
+    }
+    renderWatermark(el.canvas.getContext('2d'), photo.image, settings, w, h);
+  }
+
+  function decodeWithImageElement(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        if (!img.naturalWidth || !img.naturalHeight) {
+          reject(new Error('empty image'));
+          return;
+        }
+        resolve({ image: img, width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('decode failed'));
+      };
+      img.src = url;
+    });
+  }
+
+  function decodeImage(file) {
+    if (typeof window.createImageBitmap === 'function') {
+      return window.createImageBitmap(file, { imageOrientation: 'from-image' }).then(function (bitmap) {
+        return { image: bitmap, width: bitmap.width, height: bitmap.height };
+      }, function () {
+        return decodeWithImageElement(file);
+      });
+    }
+    return decodeWithImageElement(file);
+  }
+
+  function handleFile(file) {
+    if (!file) {
+      return;
+    }
+    var token = ++loadToken;
+    decodeImage(file).then(function (decoded) {
+      if (token !== loadToken) {
+        return;
+      }
+      if (photo && photo.image && typeof photo.image.close === 'function') {
+        photo.image.close();
+      }
+      photo = {
+        image: decoded.image,
+        width: decoded.width,
+        height: decoded.height,
+        name: file.name || 'photo',
+        type: file.type
+      };
+      showError(null);
+      showNotice(null);
+      updateButtons();
+      scheduleRender();
+    }, function () {
+      if (token !== loadToken) {
+        return;
+      }
+      showError('errorDecode', { name: file.name || null });
+    });
+  }
+
+  var EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
+  function splitName(name) {
+    var dot = name.lastIndexOf('.');
+    if (dot <= 0) {
+      return { base: name, ext: '' };
+    }
+    return { base: name.slice(0, dot), ext: name.slice(dot + 1) };
+  }
+
+  function outputTypeFor(current) {
+    if (EXTENSIONS[current.type]) {
+      return current.type;
+    }
+    var ext = splitName(current.name).ext.toLowerCase();
+    if (ext === 'jpg' || ext === 'jpeg') {
+      return 'image/jpeg';
+    }
+    if (ext === 'webp') {
+      return 'image/webp';
+    }
+    return 'image/png';
+  }
+
+  function outputName(current, blobType) {
+    var parts = splitName(current.name);
+    var sourceType = outputTypeFor(current);
+    var ext = (blobType === sourceType && parts.ext) ? parts.ext : (EXTENSIONS[blobType] || 'png');
+    return parts.base + '-watermarked.' + ext;
+  }
+
+  function canvasToBlob(canvas, type) {
+    return new Promise(function (resolve) {
+      try {
+        canvas.toBlob(function (blob) {
+          resolve(blob);
+        }, type, type === 'image/jpeg' ? 0.92 : undefined);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
+  function renderToBlob(current, width, height, type) {
+    var canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return Promise.resolve(null);
+    }
+    try {
+      renderWatermark(ctx, current.image, settings, width, height);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+    return canvasToBlob(canvas, type).then(function (blob) {
+      canvas.width = 0;
+      canvas.height = 0;
+      return blob;
+    });
+  }
+
+  // Resolves to { blob, name, resized }; rejects if the image cannot be exported at all.
+  function exportImage() {
+    var current = photo;
+    var type = outputTypeFor(current);
+    return renderToBlob(current, current.width, current.height, type).then(function (blob) {
+      if (blob) {
+        return { blob: blob, name: outputName(current, blob.type), resized: false };
+      }
+      var scale = Math.sqrt(MAX_FALLBACK_PIXELS / (current.width * current.height));
+      if (scale >= 1) {
+        throw new Error('export failed');
+      }
+      var w = Math.max(1, Math.floor(current.width * scale));
+      var h = Math.max(1, Math.floor(current.height * scale));
+      return renderToBlob(current, w, h, type).then(function (smaller) {
+        if (!smaller) {
+          throw new Error('export failed');
+        }
+        return { blob: smaller, name: outputName(current, smaller.type), resized: true, width: w, height: h };
+      });
+    });
+  }
+
+  function withExport(action) {
+    if (!photo || busy) {
+      return;
+    }
+    busy = true;
+    updateButtons();
+    showError(null);
+    exportImage().then(function (result) {
+      if (result.resized) {
+        showNotice('noticeResized', { width: result.width, height: result.height });
+      } else {
+        showNotice(null);
+      }
+      return action(result);
+    }).catch(function (err) {
+      if (err && err.name === 'AbortError') {
+        return;
+      }
+      showError('errorExport');
+    }).then(function () {
+      busy = false;
+      updateButtons();
+    });
+  }
+
+  function saveBlob(result) {
+    var url = URL.createObjectURL(result.blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = result.name;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 10000);
+  }
+
+  function shareBlob(result) {
+    var file = new File([result.blob], result.name, { type: result.blob.type });
+    if (!navigator.canShare({ files: [file] })) {
+      saveBlob(result);
+      return undefined;
+    }
+    return navigator.share({ files: [file], title: result.name });
+  }
+
+  el.fileInput.addEventListener('change', function () {
+    var file = el.fileInput.files && el.fileInput.files[0];
+    handleFile(file);
+    el.fileInput.value = '';
+  });
+
+  el.text.addEventListener('input', onSettingsInput);
+  el.size.addEventListener('input', onSettingsInput);
+  el.color.addEventListener('input', onSettingsInput);
+  el.opacity.addEventListener('input', onSettingsInput);
+  el.position.addEventListener('input', onSettingsInput);
+  el.position.addEventListener('change', onSettingsInput);
+
+  function onSettingsInput() {
+    readSettings();
+    scheduleRender();
+  }
+
+  el.save.addEventListener('click', function () {
+    withExport(saveBlob);
+  });
+
+  el.share.addEventListener('click', function () {
+    withExport(shareBlob);
+  });
+
+  window.addEventListener('resize', scheduleRender);
+
+  el.lang.addEventListener('change', function () {
+    applyLanguage(el.lang.value);
+    storeLanguage(currentLanguage);
+  });
+
+  applyLanguage(resolveLanguage(readStoredLanguage(), browserLanguages()));
+  syncControls();
+  updateButtons();
+  renderPreview();
+})();
+  </script>
+</body>
+</html>

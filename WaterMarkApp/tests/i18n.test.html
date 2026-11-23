@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Localization tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    .pass { color: #166534; }
+    .fail { color: #991b1b; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Localization tests</h1>
+  <p id="summary">Running…</p>
+  <ul id="results"></ul>
+
+  <script src="load-app.js"></script>
+  <script>
+    loadApp(function (app) {
+      'use strict';
+      var i18n = app.WatermarkI18n;
+      var results = [];
+
+      function check(name, ok, detail) {
+        results.push({ name: name, ok: !!ok, detail: detail || '' });
+      }
+
+      function expectLang(name, saved, languages, expected) {
+        var actual = i18n.resolveLanguage(saved, languages);
+        check('resolveLanguage: ' + name, actual === expected, 'expected ' + expected + ', got ' + actual);
+      }
+
+      expectLang('["zh-CN","en-US"] -> zh-CN', null, ['zh-CN', 'en-US'], 'zh-CN');
+      expectLang('["zh-TW"] -> zh-CN', null, ['zh-TW'], 'zh-CN');
+      expectLang('["zh"] -> zh-CN', null, ['zh'], 'zh-CN');
+      expectLang('["fr-FR","de-DE"] -> en', null, ['fr-FR', 'de-DE'], 'en');
+      expectLang('["en-GB","zh-CN"] -> en', null, ['en-GB', 'zh-CN'], 'en');
+      expectLang('["fr-FR","zh-HK"] -> zh-CN', null, ['fr-FR', 'zh-HK'], 'zh-CN');
+      expectLang('saved zh-CN overrides ["en-US"]', 'zh-CN', ['en-US'], 'zh-CN');
+      expectLang('saved en overrides ["zh-CN"]', 'en', ['zh-CN'], 'en');
+      expectLang('invalid saved value is ignored', 'klingon', ['zh-CN'], 'zh-CN');
+      expectLang('empty list -> en', null, [], 'en');
+
+      var languages = Object.keys(i18n.MESSAGES);
+      check('supported languages are en and zh-CN', languages.sort().join(',') === 'en,zh-CN', languages.join(','));
+
+      var enKeys = Object.keys(i18n.MESSAGES.en).sort();
+      var zhKeys = Object.keys(i18n.MESSAGES['zh-CN']).sort();
+      var missingZh = enKeys.filter(function (k) { return zhKeys.indexOf(k) < 0; });
+      var missingEn = zhKeys.filter(function (k) { return enKeys.indexOf(k) < 0; });
+      check('dictionaries have identical keys', missingZh.length === 0 && missingEn.length === 0,
+        'missing in zh-CN: ' + missingZh.join(',') + '; missing in en: ' + missingEn.join(','));
+
+      languages.forEach(function (lang) {
+        var empty = Object.keys(i18n.MESSAGES[lang]).filter(function (k) {
+          return typeof i18n.MESSAGES[lang][k] !== 'string' || !i18n.MESSAGES[lang][k].trim();
+        });
+        check(lang + ': no empty values', empty.length === 0, empty.join(','));
+      });
+
+      var differing = enKeys.filter(function (k) { return i18n.MESSAGES.en[k] !== i18n.MESSAGES['zh-CN'][k]; });
+      check('zh-CN strings are actually translated', differing.length === enKeys.length,
+        'same as English: ' + enKeys.filter(function (k) { return differing.indexOf(k) < 0; }).join(','));
+
+      check('translate interpolates params',
+        i18n.translate('zh-CN', 'noticeResized', { width: 10, height: 20 }).indexOf('10×20') >= 0);
+      check('translate keeps placeholders when params missing',
+        i18n.translate('en', 'errorDecode', {}).indexOf('{name}') >= 0);
+      check('translate falls back to English for unknown language',
+        i18n.translate('xx', 'save') === i18n.MESSAGES.en.save);
+
+      var list = document.getElementById('results');
+      var failed = 0;
+      results.forEach(function (r) {
+        if (!r.ok) { failed++; }
+        var li = document.createElement('li');
+        li.className = r.ok ? 'pass' : 'fail';
+        li.textContent = (r.ok ? 'PASS ' : 'FAIL ') + r.name + (r.detail && !r.ok ? ' — ' + r.detail : '');
+        list.appendChild(li);
+      });
+      var summary = document.getElementById('summary');
+      summary.textContent = failed === 0
+        ? 'ALL PASSED (' + results.length + ' assertions)'
+        : failed + ' of ' + results.length + ' assertions FAILED';
+      summary.className = failed === 0 ? 'pass' : 'fail';
+      document.body.setAttribute('data-result', failed === 0 ? 'pass' : 'fail');
+    });
+  </script>
+</body>
+</html>
