@@ -13,7 +13,7 @@ export const MIN_CANDIDATE_CONFIDENCE = 85;
 export type OdometerReading =
   | { kind: 'candidate'; value: number; confidence: number; rawText: string }
   | { kind: 'low-confidence'; value: number; confidence: number; rawText: string }
-  | { kind: 'ambiguous'; readings: string[]; rawText: string }
+  | { kind: 'ambiguous'; readings: NumberToken[]; rawText: string }
   | { kind: 'decimal-only'; readings: string[]; rawText: string }
   | { kind: 'none'; rawText: string };
 
@@ -35,7 +35,7 @@ function tokenize(words: OcrWord[]): NumberToken[] {
       else if (THOUSANDS.test(text)) integer = Number(text.replaceAll(',', ''));
       // Anything else (e.g. "123.4", "58.320") is kept as a non-integer reading, never stripped.
       if (integer !== null && !Number.isSafeInteger(integer)) integer = null;
-      tokens.push({ text, integer, confidence: word.confidence });
+      tokens.push({ text, integer, confidence: Math.round(word.confidence) });
     }
   }
   return tokens;
@@ -51,11 +51,13 @@ export function interpretOdometer(words: OcrWord[], minConfidence = MIN_CANDIDAT
   if (tokens.length === 0) return { kind: 'none', rawText };
 
   const integers = tokens.filter((t) => t.integer !== null);
+  if (tokens.length > 1 && tokens.some((t) => /^\d+$/.test(t.text) || THOUSANDS.test(t.text))) {
+    return { kind: 'ambiguous', readings: tokens, rawText };
+  }
   if (integers.length === 0) {
     const decimals = tokens.filter((t) => /[.,]/.test(t.text));
     return decimals.length > 0 ? { kind: 'decimal-only', readings: decimals.map((t) => t.text), rawText } : { kind: 'none', rawText };
   }
-  if (tokens.length > 1) return { kind: 'ambiguous', readings: tokens.map((t) => t.text), rawText };
 
   const [token] = integers;
   const value = token.integer as number;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseOdometer } from '../domain/records';
 import { checkOcrResources, OcrError, prepareOcr, startRecognition, type RecognitionJob } from '../ocr/engine';
 import { cropForOcr, decodeImage, DEFAULT_CROP, type CropRect } from '../ocr/image';
-import { interpretOdometer, type OdometerReading } from '../ocr/interpret';
+import { interpretOdometer, MIN_CANDIDATE_CONFIDENCE, type OdometerReading } from '../ocr/interpret';
 import { Notice } from './common';
 import { CropSelector } from './CropSelector';
 
@@ -102,6 +102,9 @@ export function OdometerCapture({ onAccept, onClose }: { onAccept: (km: number) 
   async function recognize() {
     if (!bitmap.current) return;
     stopWork();
+    setEdited('');
+    setEditError(null);
+    setPhase({ name: 'recognizing', progress: 0 });
     const current = token.current;
     const alive = () => current === token.current;
     try {
@@ -289,6 +292,7 @@ function ResultView({
   onRetry: () => void;
   onClose: () => void;
 }) {
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const retry = (
     <div className="input-row">
       <button type="button" className="button" onClick={onRetry}>
@@ -299,6 +303,23 @@ function ResultView({
       </button>
     </div>
   );
+  const confirmation = (
+    <>
+      <div className="input-row">
+        <input
+          className="input"
+          aria-label="核对识别出的总里程"
+          inputMode="numeric"
+          value={edited}
+          onChange={(e) => onEdit(e.target.value)}
+        />
+        <button type="button" className="button button-primary" onClick={onAccept}>
+          采用
+        </button>
+      </div>
+      {editError && <div className="field-error">{editError}</div>}
+    </>
+  );
 
   if (reading.kind === 'candidate') {
     return (
@@ -307,19 +328,40 @@ function ResultView({
           识别结果：<strong>{reading.value}</strong> 公里（可信度 {reading.confidence}%）。请核对这是<strong>总里程（ODO）</strong>
           ，而不是小计里程或续航里程；如有误可直接修改。
         </Notice>
-        <div className="input-row">
-          <input
-            className="input"
-            aria-label="核对识别出的总里程"
-            inputMode="numeric"
-            value={edited}
-            onChange={(e) => onEdit(e.target.value)}
-          />
-          <button type="button" className="button button-primary" onClick={onAccept}>
-            采用
-          </button>
+        {confirmation}
+        {retry}
+      </div>
+    );
+  }
+
+  if (reading.kind === 'ambiguous') {
+    return (
+      <div className="ocr-result" data-testid="ocr-choices">
+        <Notice kind="warning">
+          所选区域识别到多个数字，请对照照片选择<strong>总里程（ODO）</strong>，不要选择小计里程或续航里程。
+          可信度低的数字可能有误，请仔细核对；也可以重新框选或手动输入。
+        </Notice>
+        <div className="ocr-choices" role="group" aria-label="识别出的数字">
+          {reading.readings.map((item, index) => (
+            item.integer !== null ? (
+              <button
+                type="button"
+                className={`button ocr-choice${selectedIndex === index ? ' ocr-choice-selected' : ''}`}
+                aria-pressed={selectedIndex === index}
+                key={index}
+                onClick={() => {
+                  setSelectedIndex(index);
+                  onEdit(String(item.integer));
+                }}
+              >
+                {item.text}（{item.confidence < MIN_CANDIDATE_CONFIDENCE ? '可信度低，' : ''}可信度 {item.confidence}%）
+              </button>
+            ) : (
+              <div className="ocr-choice-unavailable" key={index}>{item.text}（小数或无效数字，不能直接采用）</div>
+            )
+          ))}
         </div>
-        {editError && <div className="field-error">{editError}</div>}
+        {selectedIndex !== null && confirmation}
         {retry}
       </div>
     );
@@ -329,10 +371,6 @@ function ResultView({
     'low-confidence':
       reading.kind === 'low-confidence'
         ? `识别可信度过低（${reading.confidence}%），为避免填错，未给出结果。请缩小框选范围或换一张更清晰的照片重试，或手动输入。`
-        : '',
-    ambiguous:
-      reading.kind === 'ambiguous'
-        ? `所选区域识别到多个数字（${reading.readings.join('、')}），无法确定哪个是总里程。请缩小框选范围只包含总里程，或手动输入。`
         : '',
     'decimal-only':
       reading.kind === 'decimal-only'

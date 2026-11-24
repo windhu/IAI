@@ -13,7 +13,11 @@ describe('interpretOdometer', () => {
   });
 
   it('never concatenates separate numbers', () => {
-    expect(interpretOdometer([w('58'), w('320')])).toEqual({ kind: 'ambiguous', readings: ['58', '320'], rawText: '58 320' });
+    expect(interpretOdometer([w('58'), w('320')])).toEqual({
+      kind: 'ambiguous',
+      readings: [{ text: '58', integer: 58, confidence: 92 }, { text: '320', integer: 320, confidence: 92 }],
+      rawText: '58 320',
+    });
   });
 
   it('does not pick the largest of several numbers', () => {
@@ -23,6 +27,19 @@ describe('interpretOdometer', () => {
 
   it('treats an integer next to a trip decimal as ambiguous', () => {
     expect(interpretOdometer([w('58320'), w('123.4')]).kind).toBe('ambiguous');
+  });
+
+  it('retains the original text, safe values and individual confidence for multiple readings', () => {
+    expect(interpretOdometer([w('58,320', 84.4), w('123.4', 98), w('9007199254740991', 90), w('9007199254740992', 70)]))
+      .toMatchObject({
+        kind: 'ambiguous',
+        readings: [
+          { text: '58,320', integer: 58320, confidence: 84 },
+          { text: '123.4', integer: null, confidence: 98 },
+          { text: '9007199254740991', integer: Number.MAX_SAFE_INTEGER, confidence: 90 },
+          { text: '9007199254740992', integer: null, confidence: 70 },
+        ],
+      });
   });
 
   it('keeps the decimal point of a trip reading instead of stripping it', () => {
@@ -42,5 +59,16 @@ describe('interpretOdometer', () => {
 
   it('rejects values beyond the safe integer range', () => {
     expect(interpretOdometer([w('99999999999999999999')]).kind).toBe('none');
+  });
+
+  it('retains multiple unsafe integer and decimal readings without making them selectable', () => {
+    expect(interpretOdometer([w('9007199254740992'), w('123.4')])).toMatchObject({
+      kind: 'ambiguous',
+      readings: [
+        { text: '9007199254740992', integer: null },
+        { text: '123.4', integer: null },
+      ],
+    });
+    expect(interpretOdometer([w('123.4'), w('56.7')]).kind).toBe('decimal-only');
   });
 });

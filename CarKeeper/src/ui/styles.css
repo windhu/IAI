@@ -524,6 +524,31 @@ textarea.input {
   width: 100%;
 }
 
+.ocr-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ocr-choice {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.ocr-choice-selected {
+  border-color: var(--blue);
+  background: #e7f0fc;
+  color: var(--blue-dark);
+}
+
+.ocr-choice-unavailable {
+  max-width: 100%;
+  padding: 8px 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .capture p {
   margin: 0;
 }

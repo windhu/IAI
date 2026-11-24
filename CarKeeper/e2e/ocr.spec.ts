@@ -312,16 +312,68 @@ test('裁剪只识别所选区域：上方整数可采用，下方小计小数�
   await expect(page.getByTestId('ocr-candidate')).toContainText('58320', { timeout: 60_000 });
 });
 
-test('多个数字时提示缩小范围，不自动选取', async ({ page, browser }) => {
-  await prepareOcrFromHome(page, ROOT);
-  await openCapture(page, ROOT, await renderDashboard(browser));
-  await dragCrop(page, [0.02, 0.02], [0.98, 0.98]);
-  await page.getByRole('button', { name: '识别所选区域' }).click();
-  const rejected = page.getByTestId('ocr-rejected');
-  await expect(rejected).toBeVisible({ timeout: 60_000 });
-  await expect(rejected).toContainText(/多个数字|缩小/);
-  await expect(page.getByLabel('总里程（公里）')).toHaveValue('');
-});
+for (const form of ['fuel', 'maintenance'] as const) {
+  test(`${form}：多个读数可选择、修改和确认，重试或换图不保留选择`, async ({ page, browser }) => {
+    await prepareOcrFromHome(page, ROOT);
+    const image = await renderDashboard(browser);
+    await page.goto(`${ROOT}#/${form}/new`);
+    await page.getByLabel('总里程（公里）').fill('11111');
+    await page.getByRole('button', { name: '拍照识别' }).click();
+    const upload = page.getByTestId('album-input');
+    await upload.setInputFiles({ name: 'dash.png', mimeType: 'image/png', buffer: image });
+    await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+    await dragCrop(page, [0.02, 0.02], [0.98, 0.98]);
+    await page.getByRole('button', { name: '识别所选区域' }).click();
+    const choices = page.getByTestId('ocr-choices');
+    await expect(choices).toBeVisible({ timeout: 60_000 });
+    await expect(choices).toContainText('123.4');
+    await expect(choices.getByRole('button', { name: /123\.4/ })).toHaveCount(0);
+    await expect(choices.getByLabel('核对识别出的总里程')).toHaveCount(0);
+    const choice = choices.getByRole('button', { name: /58320/ });
+    await choice.focus();
+    await page.keyboard.press('Enter');
+    await expect(choice).toHaveAttribute('aria-pressed', 'true');
+    await expect(choices.getByLabel('核对识别出的总里程')).toHaveValue('58320');
+    await expect(page.getByLabel('总里程（公里）')).toHaveValue('11111');
+    expect(await readStoredRecords(page)).toEqual([]);
+    const box = await choice.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+
+    if (form === 'fuel') {
+      await page.getByRole('button', { name: '关闭', exact: true }).click();
+      await expect(page.getByLabel('总里程（公里）')).toHaveValue('11111');
+      await page.getByRole('button', { name: '拍照识别' }).click();
+      await upload.setInputFiles({ name: 'dash.png', mimeType: 'image/png', buffer: image });
+      await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+      await dragCrop(page, [0.02, 0.02], [0.98, 0.98]);
+      await page.getByRole('button', { name: '识别所选区域' }).click();
+      await expect(choices).toBeVisible({ timeout: 60_000 });
+      await expect(choices.getByLabel('核对识别出的总里程')).toHaveCount(0);
+    }
+
+    await choices.getByRole('button', { name: '重新识别' }).click();
+    await expect(choices).toBeVisible({ timeout: 60_000 });
+    await expect(choices.getByLabel('核对识别出的总里程')).toHaveCount(0);
+    await choices.getByRole('button', { name: /58320/ }).click();
+    await upload.setInputFiles({ name: 'replacement.png', mimeType: 'image/png', buffer: image });
+    await expect(page.getByRole('button', { name: '识别所选区域' })).toBeVisible();
+    await expect(choices).toHaveCount(0);
+    await expect(page.getByLabel('总里程（公里）')).toHaveValue('11111');
+    await dragCrop(page, [0.02, 0.02], [0.98, 0.98]);
+    await page.getByRole('button', { name: '识别所选区域' }).click();
+    await expect(choices).toBeVisible({ timeout: 60_000 });
+    await expect(choices.getByLabel('核对识别出的总里程')).toHaveCount(0);
+    await choices.getByRole('button', { name: /58320/ }).click();
+    await choices.getByLabel('核对识别出的总里程').fill('58321.5');
+    await choices.getByRole('button', { name: '采用' }).click();
+    await expect(choices.getByText('请输入不含小数的非负整数公里数')).toBeVisible();
+    await choices.getByLabel('核对识别出的总里程').fill('58321');
+    await choices.getByRole('button', { name: '采用' }).click();
+    await expect(page.getByLabel('总里程（公里）')).toHaveValue('58321');
+    expect(await readStoredRecords(page)).toEqual([]);
+  });
+}
 
 test('可修正候选值；取消识别保留原表单', async ({ page, browser }) => {
   await prepareOcrFromHome(page, ROOT);
