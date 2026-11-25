@@ -35,8 +35,6 @@ tests/
   load-app.js        Test helper: loads web/index.html in an iframe
   layout.test.html   Browser test page for the watermark layout logic
   i18n.test.html     Browser test page for language detection and translations
-.github/workflows/
-  deploy-pages.yml   Publishes web/ to GitHub Pages
 ```
 
 Inside `index.html`, the code is split into sections marked `Styles`, `Watermark core`,
@@ -60,9 +58,8 @@ publishes this app together with CarKeeper at
 <https://windhu.github.io/IAI/WaterMarkApp/>. Set **Settings → Pages → Source** to
 **GitHub Actions**, then push to `main` or run the workflow manually.
 
-The nested `.github/workflows/deploy-pages.yml` is only active if WaterMarkApp itself is
-the repository root; GitHub does not run nested workflows in IAI. Any other static host (Netlify, Cloudflare Pages,
-an S3 bucket, nginx…) works too – just publish `web/index.html`.
+Any other static host (Netlify, Cloudflare Pages, an S3 bucket, nginx…) works too –
+just publish `web/index.html`.
 
 ## Use on Android
 

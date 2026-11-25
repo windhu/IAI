@@ -5,6 +5,10 @@
 - [爱车记录](CarKeeper/README.md)：记录汽车保养与加油信息，支持离线使用。
 - [照片水印](WaterMarkApp/README.md)：在设备上为照片添加文字水印。
 
+## 共享 GitHub 配置
+
+两个应用共用仓库根目录的 [GitHub 配置](.github/)。各应用的 OpenSpec 配置和规格仍保存在各自目录中；运行 OpenSpec 命令时，请以对应应用目录为工作目录。
+
 ## GitHub Pages
 
 站点首页为 <https://windhu.github.io/IAI/>，两个应用分别位于 `CarKeeper/` 和 `WaterMarkApp/` 子目录。
